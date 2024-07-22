@@ -7,7 +7,7 @@ import { Email } from '../utils/email'
 import { DeviceRegistrationPage } from './DeviceRegistrationPage'
 import type { TimingRecords } from '../fixtures/timing-fixture'
 
-export type ModalFlavor = 'default' | 'siwe' | 'email' | 'wallet'
+export type ModalFlavor = 'default' | 'siwe' | 'email' | 'wallet' | 'all'
 
 export class ModalPage {
   private readonly baseURL = BASE_URL
@@ -71,8 +71,6 @@ export class ModalPage {
     context: BrowserContext,
     mailsacApiKey: string
   ): Promise<void> {
-    await this.load()
-
     this.emailAddress = emailAddress
 
     const email = new Email(mailsacApiKey)
@@ -113,7 +111,6 @@ export class ModalPage {
   }
 
   async loginWithEmail(email: string) {
-    await this.page.goto(this.url)
     // Connect Button doesn't have a proper `disabled` attribute so we need to wait for the button to change the text
     await this.page
       .getByTestId('connect-button')
@@ -126,8 +123,25 @@ export class ModalPage {
       this.page.getByText(email),
       `Expected current email: ${email} to be visible on the notification screen`
     ).toBeVisible({
-      timeout: 10_000
+      timeout: 20_000
     })
+  }
+
+  async loginWithSocial(socialMail: string, socialPass: string) {
+    const authFile = 'playwright/.auth/user.json'
+    await this.page
+      .getByTestId('connect-button')
+      .getByRole('button', { name: 'Connect Wallet' })
+      .click()
+    const discordPopupPromise = this.page.waitForEvent('popup')
+    await this.page.getByTestId('social-selector-discord').click()
+    const discordPopup = await discordPopupPromise
+    await discordPopup.fill('#uid_8', socialMail)
+    await discordPopup.fill('#uid_10', socialPass)
+    await discordPopup.locator('[type=submit]').click()
+    await discordPopup.locator('.footer_b96583 button:nth-child(2)').click()
+    await discordPopup.context().storageState({ path: authFile })
+    await discordPopup.waitForEvent('close')
   }
 
   async enterOTP(otp: string, headerTitle = 'Confirm Email') {
@@ -173,7 +187,9 @@ export class ModalPage {
   }
 
   async sign() {
-    await this.page.getByTestId('sign-message-button').click()
+    const signButton = this.page.getByTestId('sign-message-button')
+    await signButton.scrollIntoViewIfNeeded()
+    await signButton.click()
   }
 
   async signatureRequestFrameShouldVisible() {
@@ -185,6 +201,7 @@ export class ModalPage {
     })
     await this.page.waitForTimeout(2000)
   }
+
   async clickSignatureRequestButton(name: string) {
     await this.page.frameLocator('#w3m-iframe').getByRole('button', { name, exact: true }).click()
   }
@@ -201,6 +218,8 @@ export class ModalPage {
 
   async clickWalletUpgradeCard(context: BrowserContext) {
     await this.page.getByTestId('account-button').click()
+
+    await this.page.getByTestId('w3m-profile-button').click()
     await this.page.getByTestId('w3m-wallet-upgrade-card').click()
 
     const page = await doActionAndWaitForNewPage(
@@ -213,6 +232,9 @@ export class ModalPage {
 
   async promptSiwe() {
     const siweSign = this.page.getByTestId('w3m-connecting-siwe-sign')
+    await expect(siweSign, 'Siwe prompt sign button should be visible').toBeVisible({
+      timeout: 10_000
+    })
     await expect(siweSign, 'Siwe prompt sign button should be enabled').toBeEnabled()
     await siweSign.click()
   }
@@ -271,6 +293,8 @@ export class ModalPage {
       this.page.getByTestId('w3m-account-email-update'),
       `Expected to go to the account screen after the update`
     ).toBeVisible()
+
+    await expect(this.page.getByText(newEmailAddress)).toBeVisible()
   }
 
   async updateOtpFlow(emailAddress: string, mailsacApiKey: string, headerTitle: string) {

@@ -6,9 +6,15 @@ import type {
   Connector,
   EstimateGasTransactionArgs,
   SendTransactionArgs,
-  WcWallet
+  WcWallet,
+  WriteContractArgs
 } from '../utils/TypeUtil.js'
 import { TransactionsController } from './TransactionsController.js'
+import { type W3mFrameTypes } from '@web3modal/wallet'
+import { ModalController } from './ModalController.js'
+import { ConnectorController } from './ConnectorController.js'
+import { EventsController } from './EventsController.js'
+import { NetworkController } from './NetworkController.js'
 
 // -- Types --------------------------------------------- //
 export interface ConnectExternalOptions {
@@ -27,7 +33,11 @@ export interface ConnectionControllerClient {
   parseUnits: (value: string, decimals: number) => bigint
   formatUnits: (value: bigint, decimals: number) => string
   connectExternal?: (options: ConnectExternalOptions) => Promise<void>
+  reconnectExternal?: (options: ConnectExternalOptions) => Promise<void>
   checkInstalled?: (ids?: string[]) => boolean
+  writeContract: (args: WriteContractArgs) => Promise<`0x${string}` | null>
+  getEnsAddress: (value: string) => Promise<false | string>
+  getEnsAvatar: (value: string) => Promise<false | string>
 }
 
 export interface ConnectionControllerState {
@@ -88,6 +98,27 @@ export const ConnectionController = {
     StorageUtil.setConnectedConnector(options.type)
   },
 
+  async reconnectExternal(options: ConnectExternalOptions) {
+    await this._getClient().reconnectExternal?.(options)
+    StorageUtil.setConnectedConnector(options.type)
+  },
+
+  async setPreferredAccountType(accountType: W3mFrameTypes.AccountType) {
+    ModalController.setLoading(true)
+    const authConnector = ConnectorController.getAuthConnector()
+    if (!authConnector) {
+      return
+    }
+    await authConnector?.provider.setPreferredAccount(accountType)
+    await this.reconnectExternal(authConnector)
+    ModalController.setLoading(false)
+    EventsController.sendEvent({
+      type: 'track',
+      event: 'SET_PREFERRED_ACCOUNT_TYPE',
+      properties: { accountType, network: NetworkController.state.caipNetwork?.id || '' }
+    })
+  },
+
   async signMessage(message: string) {
     return this._getClient().signMessage(message)
   },
@@ -106,6 +137,18 @@ export const ConnectionController = {
 
   async estimateGas(args: EstimateGasTransactionArgs) {
     return this._getClient().estimateGas(args)
+  },
+
+  async writeContract(args: WriteContractArgs) {
+    return this._getClient().writeContract(args)
+  },
+
+  async getEnsAddress(value: string) {
+    return this._getClient().getEnsAddress(value)
+  },
+
+  async getEnsAvatar(value: string) {
+    return this._getClient().getEnsAvatar(value)
   },
 
   checkInstalled(ids?: string[]) {
@@ -141,6 +184,8 @@ export const ConnectionController = {
 
   async disconnect() {
     await this._getClient().disconnect()
+    StorageUtil.removeConnectedWalletImageUrl()
+
     this.resetWcConnection()
   }
 }

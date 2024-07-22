@@ -1,13 +1,21 @@
 import { customElement } from '@web3modal/ui'
-import { ConnectorController, RouterController, SnackController } from '@web3modal/core'
+import {
+  ConnectionController,
+  ConnectorController,
+  RouterController,
+  CoreHelperUtil,
+  RouterUtil,
+  SnackController
+} from '@web3modal/core'
 import { LitElement, html } from 'lit'
 import { state } from 'lit/decorators.js'
 import { W3mFrameRpcConstants } from '@web3modal/wallet'
+import { NavigationUtil } from '@web3modal/common'
 
 @customElement('w3m-upgrade-to-smart-account-view')
 export class W3mUpgradeToSmartAccountView extends LitElement {
   // -- State & Properties -------------------------------- //
-  @state() private emailConnector = ConnectorController.getEmailConnector()
+  @state() private authConnector = ConnectorController.getAuthConnector()
 
   @state() private loading = false
 
@@ -21,7 +29,11 @@ export class W3mUpgradeToSmartAccountView extends LitElement {
         .padding=${['0', '0', 'l', '0'] as const}
       >
         ${this.onboardingTemplate()} ${this.buttonsTemplate()}
-        <wui-link>
+        <wui-link
+          @click=${() => {
+            CoreHelperUtil.openHref(NavigationUtil.URLS.FAQ, '_blank')
+          }}
+        >
           Learn more
           <wui-icon color="inherit" slot="iconRight" name="externalLink"></wui-icon>
         </wui-link>
@@ -57,7 +69,7 @@ export class W3mUpgradeToSmartAccountView extends LitElement {
   private buttonsTemplate() {
     return html`<wui-flex .padding=${['0', '2l', '0', '2l'] as const} gap="s">
       <wui-button
-        variant="accentBg"
+        variant="accent"
         @click=${this.redirectToAccount.bind(this)}
         size="lg"
         borderRadius="xs"
@@ -75,15 +87,14 @@ export class W3mUpgradeToSmartAccountView extends LitElement {
   }
 
   private setPreferSmartAccount = async () => {
-    if (this.emailConnector) {
+    if (this.authConnector) {
       try {
         this.loading = true
-        await this.emailConnector.provider.setPreferredAccount(
+        await ConnectionController.setPreferredAccountType(
           W3mFrameRpcConstants.ACCOUNT_TYPES.SMART_ACCOUNT
         )
-        await this.emailConnector.provider.connect()
         this.loading = false
-        RouterController.push('Account')
+        RouterUtil.navigateAfterPreferredAccountTypeSelect()
       } catch (e) {
         SnackController.showError('Error upgrading to smart account')
       }

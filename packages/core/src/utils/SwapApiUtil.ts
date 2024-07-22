@@ -27,20 +27,20 @@ export const SwapApiUtil = {
       chainId: NetworkController.state.caipNetwork?.id,
       projectId: OptionsController.state.projectId
     })
-
     const tokens =
-      response?.tokens?.map(token => {
-        return {
-          ...token,
-          eip2612: false,
-          quantity: {
-            decimals: '0',
-            numeric: '0'
-          },
-          price: 0,
-          value: 0
-        } as SwapTokenWithBalance
-      }) || []
+      response?.tokens?.map(
+        token =>
+          ({
+            ...token,
+            eip2612: false,
+            quantity: {
+              decimals: '0',
+              numeric: '0'
+            },
+            price: 0,
+            value: 0
+          }) as SwapTokenWithBalance
+      ) || []
 
     return tokens
   },
@@ -86,7 +86,7 @@ export const SwapApiUtil = {
     return false
   },
 
-  async getMyTokensWithBalance() {
+  async getMyTokensWithBalance(forceUpdate?: string) {
     const address = AccountController.state.address
     const caipNetwork = NetworkController.state.caipNetwork
 
@@ -94,25 +94,28 @@ export const SwapApiUtil = {
       return []
     }
 
-    const response = await BlockchainApiController.getBalance(address, caipNetwork.id)
-    const balances = response.balances
+    const response = await BlockchainApiController.getBalance(address, caipNetwork.id, forceUpdate)
+    const balances = response.balances.filter(balance => balance.quantity.decimals !== '0')
+
+    AccountController.setTokenBalance(balances)
 
     return this.mapBalancesToSwapTokens(balances)
   },
 
   mapBalancesToSwapTokens(balances: BlockchainApiBalanceResponse['balances']) {
     return (
-      balances?.map(token => {
-        return {
-          ...token,
-          address: token?.address
-            ? token.address
-            : `${token.chainId}:${ConstantsUtil.NATIVE_TOKEN_ADDRESS}`,
-          decimals: parseInt(token.quantity.decimals, 10),
-          logoUri: token.iconUrl,
-          eip2612: false
-        } as SwapTokenWithBalance
-      }) || []
+      balances?.map(
+        token =>
+          ({
+            ...token,
+            address: token?.address
+              ? token.address
+              : `${token.chainId}:${ConstantsUtil.NATIVE_TOKEN_ADDRESS}`,
+            decimals: parseInt(token.quantity.decimals, 10),
+            logoUri: token.iconUrl,
+            eip2612: false
+          }) as SwapTokenWithBalance
+      ) || []
     )
   }
 }
